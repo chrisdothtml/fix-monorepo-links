@@ -1,0 +1,74 @@
+#!/usr/bin/env node
+
+const { findFiles, withJsonFile, withTextFile } = require('@dubstep/core')
+const ARGV = process.argv
+  .slice(2)
+  .reduce((result, arg) => {
+    const [ key, value ] = arg.split('=')
+    return { ...result, [key.slice(2)]: value || true }
+  }, {})
+
+// works like path.join except ignores falsy path parts
+function pathJoinTruthy (...args) {
+  return args.filter(Boolean).join('/')
+}
+
+async function main () {
+  const generalUrlRegex = new RegExp(`${ARGV.org}\\/([a-z\\-]+)`, 'gi')
+  const buildkiteRegex = /\[!\[[^\]]+\]\(.+\)\n{2}/
+
+  await Promise.all([
+    Promise.all(
+      (await findFiles('**/*.md'))
+        .map(async filepath => withTextFile(filepath, async content => {
+          if (generalUrlRegex.test(content)) {
+            let match
+            while (match = generalUrlRegex.exec(content)) {
+              const [ fullMatch, pkgName ] = match
+              content = content.replace(fullMatch, pathJoinTruthy(ARGV.monorepo, ARGV.subDir, pkgName))
+            }
+
+            // reset match index pointer
+            generalUrlRegex.lastIndex = 0
+          }
+
+          if (buildkiteRegex.test(content)) {
+            content = content.replace(buildkiteRegex, '')
+          }
+
+          return content
+        }))
+    ),
+    Promise.all(
+      (await findFiles('**/package.json'))
+        .map(async filepath => withJsonFile(filepath, async pkg => {
+          const { repository } = pkg
+
+          if (repository) {
+            const isObject = typeof repository === 'object'
+            const url = isObject ? repository.url : repository
+            let match
+
+            if (url && (match = generalUrlRegex.exec(url))) {
+              const [ fullMatch, pkgName ] = match
+              const newUrl = url.replace(fullMatch, ARGV.monorepo)
+
+              if (isObject) {
+                pkg.repository.url = newUrl
+              } else {
+                pkg.repository = newUrl
+              }
+
+              pkg.homepage = pathJoinTruthy(`https://github.com`, ARGV.monorepo, ARGV.subDir, pkgName)
+              // reset match index pointer
+              generalUrlRegex.lastIndex = 0
+            }
+          }
+
+          return pkg
+        }))
+    )
+  ])
+}
+
+main().catch(console.error)

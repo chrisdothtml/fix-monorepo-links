@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "@dubstep/core": "^2.0.4"
+  }
+}
