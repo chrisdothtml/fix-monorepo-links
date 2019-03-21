@@ -30,7 +30,7 @@ Required args
   --org: github org name repos came from
 
 Optional args
-  --subDir:
+  --subDir: subdirectory of the packages (used for package homepage url)
 
 Examples
   fix --org=fusionjs --monorepo=fusionjs/fusion --subDir=packages
